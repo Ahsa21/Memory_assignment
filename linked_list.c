@@ -189,6 +189,26 @@ void list_display(Node** head) {
     pthread_mutex_unlock(&list_mutex);
 }
 
+
+void list_display_range(Node** head, Node* start_node, Node* end_node) {
+    pthread_rwlock_rdlock(&list_rwlock); // Acquire read lock
+
+    Node* current = start_node ? start_node : *head;
+    printf("[");
+    while (current != NULL && (end_node == NULL || current != end_node->next)) {
+        printf("%u", current->data);
+        if (current->next != NULL && current != end_node) {
+            printf(", ");
+        }
+        current = current->next;
+    }
+    printf("]");
+
+    pthread_rwlock_unlock(&list_rwlock); // Release read lock
+}
+
+
+
 // Count nodes in the list
 int list_count_nodes(Node** head) {
     pthread_mutex_lock(&list_mutex);
