@@ -1,24 +1,35 @@
 #include <stdio.h>
 #include <stdint.h>
-#include <stdlib.h>
+#include <pthread.h>
 #include "memory_manager.h"
-#include "linked_list.h"
-#include <string.h>
 
+// Definition of a singly linked list node.
+typedef struct Node {
+    uint16_t data;        // The data stored in the node.
+    struct Node* next;    // Pointer to the next node in the list.
+} Node;
 
+// Synchronization primitives for thread safety.
+pthread_rwlock_t list_rwlock = PTHREAD_RWLOCK_INITIALIZER; // Read-Write lock for read-heavy functions.
+pthread_mutex_t list_mutex = PTHREAD_MUTEX_INITIALIZER;    // Mutex lock for write-heavy functions.
 
-// Initialization function
+// Initializes a linked list and the custom memory manager.
+// Parameters:
+// - head: Pointer to the head pointer of the linked list.
+// - size: Size of the memory pool to be initialized.
 void list_init(Node** head, size_t size) {
+    *head = NULL;
     mem_init(size);
-    *head = NULL; // Initialize head to NULL to represent an empty list
-
 }
 
-// Insertion at the rear
+// Inserts a new node at the end of the list.
 void list_insert(Node** head, uint16_t data) {
-    Node* new_node = (Node*)mem_alloc(sizeof(Node));//
+    pthread_mutex_lock(&list_mutex); // Exclusive lock for write operation
+
+    Node* new_node = (Node*)mem_alloc(sizeof(Node));
     if (!new_node) {
-        printf("Memory allocation failed during insertion.\n");
+        printf("Memory allocation failed\n");
+        pthread_mutex_unlock(&list_mutex); // Release lock on failure
         return;
     }
 
@@ -27,204 +38,194 @@ void list_insert(Node** head, uint16_t data) {
 
     if (*head == NULL) {
         *head = new_node;
-
     } else {
         Node* current = *head;
         while (current->next != NULL) {
             current = current->next;
-            
         }
         current->next = new_node;
-        return;
     }
+
+    pthread_mutex_unlock(&list_mutex); // Release lock after insertion
 }
 
-
-
-
-
-
-
-
-// Insertion after a specific node
+// Inserts a new node immediately after a given node.
 void list_insert_after(Node* prev_node, uint16_t data) {
     if (prev_node == NULL) {
-        printf("Previous node cannot be NULL.\n");
+        printf("Previous node cannot be NULL\n");
         return;
     }
 
+    pthread_mutex_lock(&list_mutex); // Exclusive lock for write operation
+
     Node* new_node = (Node*)mem_alloc(sizeof(Node));
-    if (new_node == NULL) {
-        printf("Memory allocation failed.\n");
+    if (!new_node) {
+        printf("Memory allocation failed\n");
+        pthread_mutex_unlock(&list_mutex); // Release lock on failure
         return;
     }
+
     new_node->data = data;
     new_node->next = prev_node->next;
     prev_node->next = new_node;
-    
+
+    pthread_mutex_unlock(&list_mutex); // Release lock after insertion
 }
 
-// Insertion before a specific node
+// Inserts a new node before a given node.
 void list_insert_before(Node** head, Node* next_node, uint16_t data) {
-    if (*head == NULL || next_node == NULL) {
-        printf("Error: Invalid node reference.\n");
+    if (next_node == NULL) {
+        printf("Next node cannot be NULL\n");
         return;
     }
 
+    pthread_mutex_lock(&list_mutex); // Exclusive lock for write operation
+
     Node* new_node = (Node*)mem_alloc(sizeof(Node));
-    if (new_node == NULL) {
-        printf("Memory allocation failed.\n");
+    if (!new_node) {
+        printf("Memory allocation failed\n");
+        pthread_mutex_unlock(&list_mutex); // Release lock on failure
         return;
     }
     new_node->data = data;
 
-    // If next_node is the head
     if (*head == next_node) {
         new_node->next = *head;
         *head = new_node;
-        return;
-    }
-
-    // Find the node just before next_node
-    Node* temp = *head;
-    while (temp != NULL && temp->next != next_node) {
-        temp = temp->next;
-    }
-
-    if (temp == NULL) {
-        printf("Error: Node not found.\n");
-        mem_free(new_node);
-        return;
-    }
-
-    new_node->next = next_node;
-    temp->next = new_node;
-}
-
-// Deletion function
-void list_delete(Node** head, uint16_t data) {
-    if (*head == NULL) {
-        printf("List is empty.\n");
-        return;
-    }
-
-    Node* temp = *head;
-    Node* prev = NULL;
-
-    // Check if head node contains the data
-    if (temp != NULL && temp->data == data) {
-        *head = temp->next; // Change head
-        mem_free(temp); // Free memory
-        return;
-    }
-
-    // Search for the node to be deleted
-    while (temp != NULL && temp->data != data) {
-        prev = temp;
-        temp = temp->next;
-    }
-
-    if (temp == NULL) {
-        printf("Node with data %d not found.\n", data);
-        return;
-    }
-
-    // Unlink the node from the list
-    prev->next = temp->next;
-    mem_free(temp); // Free memory
-}
-
-// Search function
-Node* list_search(Node** head, uint16_t data) {
-    Node* temp = *head;
-    while (temp != NULL) {
-        if (temp->data == data) {
-            return temp; // Return the node if data matches
+    } else {
+        Node* current = *head;
+        while (current != NULL && current->next != next_node) {
+            current = current->next;
         }
-        temp = temp->next;
+
+        if (current == NULL) {
+            printf("The specified next node is not in the list\n");
+            mem_free(new_node);
+            pthread_mutex_unlock(&list_mutex); // Release lock on failure
+            return;
+        }
+
+        new_node->next = next_node;
+        current->next = new_node;
     }
-    return NULL; // Return NULL if not found
+
+    pthread_mutex_unlock(&list_mutex); // Release lock after insertion
 }
 
+// Deletes the first node with the specified data.
+void list_delete(Node** head, uint16_t data) {
+    pthread_mutex_lock(&list_mutex); // Exclusive lock for write operation
 
-
-
-void list_display(Node** head) {
-    if (head == NULL) {
-        printf("[]\n");
+    if (*head == NULL) {
+        printf("List is empty\n");
+        pthread_mutex_unlock(&list_mutex); // Release lock if list is empty
         return;
     }
 
     Node* current = *head;
-    printf("[");
+    Node* previous = NULL;
 
-    // Traverse & print each node data
+    while (current != NULL && current->data != data) {
+        previous = current;
+        current = current->next;
+    }
+
+    if (current == NULL) {
+        printf("Data not found in the list\n");
+        pthread_mutex_unlock(&list_mutex); // Release lock if data not found
+        return;
+    }
+
+    if (previous == NULL) {
+        *head = current->next;
+    } else {
+        previous->next = current->next;
+    }
+
+    mem_free(current);
+
+    pthread_mutex_unlock(&list_mutex); // Release lock after deletion
+}
+
+// Searches for a node with the specified data.
+Node* list_search(Node** head, uint16_t data) {
+    pthread_rwlock_rdlock(&list_rwlock); // Shared lock for read-only operation
+
+    Node* current = *head;
     while (current != NULL) {
-        printf("%d", current->data);
+        if (current->data == data) {
+            pthread_rwlock_unlock(&list_rwlock); // Release lock on find
+            return current;
+        }
+        current = current->next;
+    }
 
+    pthread_rwlock_unlock(&list_rwlock); // Release lock if not found
+    return NULL;
+}
+
+// Displays all elements in the list.
+void list_display(Node** head) {
+    pthread_rwlock_rdlock(&list_rwlock); // Shared lock for read-only operation
+
+    Node* current = *head;
+    printf("[");
+    while (current != NULL) {
+        printf("%u", current->data);
         if (current->next != NULL) {
             printf(", ");
         }
         current = current->next;
     }
-    printf("]\n");
-}
+    printf("]");
 
+    pthread_rwlock_unlock(&list_rwlock); // Release lock after display
+}
 
 void list_display_range(Node** head, Node* start_node, Node* end_node) {
-    Node* temp = *head;
+    pthread_rwlock_rdlock(&list_rwlock); // Acquire read lock
 
-    // If start_node is NULL, start from the beginning of the list
-    if (start_node == NULL) {
-        start_node = *head;
-    }
-
-    // Traverse to the start_node
-    while (temp != NULL && temp != start_node) {
-        temp = temp->next;
-    }
-
-    // Start printing the list in the correct format
+    Node* current = start_node ? start_node : *head;
     printf("[");
-    bool first = true;  // To handle commas correctly
-
-    // Print elements from start_node to end_node
-    while (temp != NULL) {
-        if (!first) {
-            printf(", ");  // Print a comma before subsequent elements
+    while (current != NULL && (end_node == NULL || current != end_node->next)) {
+        printf("%u", current->data);
+        if (current->next != NULL && current != end_node) {
+            printf(", ");
         }
-        printf("%d", temp->data);
-        first = false;  // After the first element, commas are needed
-
-        if (temp == end_node) {
-            break;
-        }
-        temp = temp->next;
+        current = current->next;
     }
-    printf("]");  // Do not add newline here
+    printf("]");
+
+    pthread_rwlock_unlock(&list_rwlock); // Release read lock
 }
 
-
-
-// Count nodes in the list
+// Counts the number of nodes in the list.
 int list_count_nodes(Node** head) {
+    pthread_rwlock_rdlock(&list_rwlock); // Shared lock for read-only operation
+
     int count = 0;
-    Node* temp = *head;
-    while (temp != NULL) {
+    Node* current = *head;
+    while (current != NULL) {
         count++;
-        temp = temp->next;
+        current = current->next;
     }
+
+    pthread_rwlock_unlock(&list_rwlock); // Release lock after counting
     return count;
 }
 
-// Cleanup function
+// Frees all nodes in the list and deinitializes the memory manager.
 void list_cleanup(Node** head) {
-    Node* temp = *head;
-    while (temp != NULL) {
-        Node* next = temp->next;
-        mem_free(temp); // Free each node
-        temp = next;
+    pthread_mutex_lock(&list_mutex); // Exclusive lock for cleanup
+
+    Node* current = *head;
+    while (current != NULL) {
+        Node* next_node = current->next;
+        mem_free(current);
+        current = next_node;
     }
-    *head = NULL; // Set head to NULL after cleanup
+    *head = NULL;
     mem_deinit();
+
+    pthread_mutex_unlock(&list_mutex); // Release lock after cleanup
 }
