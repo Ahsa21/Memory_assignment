@@ -158,7 +158,7 @@ void list_delete(Node** head, uint16_t data) {
 
 // Search function
 Node* list_search(Node** head, uint16_t data) {
-    pthread_mutex_lock(&list_mutex);
+    pthread_rwlock_rdlock(&list_rwlock);
 
     Node* temp = *head;
     while (temp != NULL) {
@@ -169,13 +169,13 @@ Node* list_search(Node** head, uint16_t data) {
         temp = temp->next;
     }
 
-    pthread_mutex_unlock(&list_mutex);
+    pthread_rwlock_unrdlock(&list_rwlock);
     return NULL; // Return NULL if not found
 }
 
 // Display the list
 void list_display(Node** head) {
-    pthread_mutex_lock(&list_mutex);
+    pthread_rwlock_rdlock(&list_rwlock);
 
     Node* current = *head;
     printf("[");
@@ -188,7 +188,7 @@ void list_display(Node** head) {
     }
     printf("]\n");
 
-    pthread_mutex_unlock(&list_mutex);
+    pthread_rwlock_unrdlock(&list_rwlock);
 }
 
 
@@ -213,7 +213,7 @@ void list_display_range(Node** head, Node* start_node, Node* end_node) {
 
 // Count nodes in the list
 int list_count_nodes(Node** head) {
-    pthread_mutex_lock(&list_mutex);
+    pthread_rwlock_rdlock(&list_rwlock);
 
     int count = 0;
     Node* temp = *head;
@@ -222,7 +222,7 @@ int list_count_nodes(Node** head) {
         temp = temp->next;
     }
 
-    pthread_mutex_unlock(&list_mutex);
+    pthread_rwlock_unrdlock(&list_rwlock);
     return count;
 }
 
