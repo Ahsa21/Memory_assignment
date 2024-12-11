@@ -9,7 +9,6 @@
 // Mutex for thread safety
 pthread_mutex_t list_mutex = PTHREAD_MUTEX_INITIALIZER;
 pthread_rwlock_t list_rwlock = PTHREAD_RWLOCK_INITIALIZER; // Read-Write lock for read-heavy functions.
-pthread_mutex_t list_mutex = PTHREAD_MUTEX_INITIALIZER;    // Mutex lock for write-heavy functions.
 
 // Initialization function
 void list_init(Node** head, size_t size) {
